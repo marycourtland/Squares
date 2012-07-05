@@ -1,0 +1,444 @@
+<!-- Random square game -->
+<!-- Created 10F (6/15/2012) -->
+
+<html>
+  <head>
+    <script type="text/javascript" src="akihabara/gbox.js"></script>
+    <script type="text/javascript" src="akihabara/trigo.js"></script>
+    <script type="text/javascript" src="akihabara/help.js"></script>
+    <script type="text/javascript" src="akihabara/toys.js"></script>
+    <script type="text/javascript" src="akihabara/gamecycle.js"></script>
+    <script type="text/javascript" src="akihabara/mouse.js"></script>
+  </head>
+  <body></body>
+  
+  <script id=utility>
+	function xy(coord_x, coord_y) {
+		/* Returns a simple 2d coordinate object */
+		return {x:coord_x, y:coord_y}
+	}
+	function wh(width, height) {
+		/* Returns a simple 2d area object */
+		return {w:width, h:height}
+	}
+	
+    gbox._keymap.enter = 13;
+	gbox._keymap.shift = 16;
+	gbox._keymap.tab = 9;
+	gbox._keymap.space = 32;
+	gbox._keymap.plus = 187;
+	gbox._keymap.minus = 189;
+	gbox._keymap.c = 67;
+	gbox._keymap.d = 68;
+	gbox._keymap.r = 82;
+	gbox._keymap.s = 83;
+	gbox._keymap.v = 86;
+    gbox._keymap.one = 49;
+    gbox._keymap.two = 50;
+    gbox._keymap.three = 51;
+    gbox._keymap.four = 52;
+    gbox._keymap.five = 53;
+	function vect_diff(vector1, vector2) {
+		return {x: vector2.x-vector1.x, y: vector2.y-vector1.y};
+	}
+	function vect_scale(vector, constant) {
+		return {x: constant*vector.x, y: constant*vector.y};
+	}
+	function vect_sum(vectors) {
+		sum = {x:0, y:0};
+		for (var i in vectors) {
+			sum.x += vectors[i].x;
+			sum.y += vectors[i].y;
+		}
+		return sum;
+	}
+	function vect_avg(vectors) {
+		return vect_scale( vect_sum(vectors), 1/vectors.length);
+	}
+	function mod(x, m) {
+		if (x<0) return x%m + m;
+		else	 return x%m;
+	}
+	function randomItem(array) {
+        return array[help.random(0, array.length)];
+    }
+	function randomRGB() {
+		return "rgb(" + help.random(0, 255).toString() + "," + help.random(0, 255).toString() + "," + help.random(0, 255).toString() + ")"
+	}
+	function randomAngle() {
+		// Returns an angle in radians
+		return Math.random() * 2*Math.PI;
+	}
+	function times(N, func) {
+		// Performs the zero-argument function N times.
+		// Returns a list of the return values from each function call.
+		// `TODO: generalize this to allow functions with arguments
+		var return_objs = new Array(N);
+		for (var i=0; i<N; i++) {
+			var s = func();
+			return_objs[i] = s;
+		}
+		return return_objs;
+	}
+    function clearBuffer(alph) {
+        // Clears the game screen.
+        gbox.blitFade(gbox.getBufferContext(), {alpha: alph?alph:1.0});
+    }
+  </script>
+  
+  <script id=game_vars>
+    // GLOBAL GAME VARIABLES
+	screen_area = wh(640, 480);
+	canvas = wh(640, 300);
+	pad = 20; // space between the canvas and the buttons
+	num_squares=500;
+	initial_size=2;
+	/*
+	colors = ["#FF6600", "#FFE600", "#99FF00", "#1AFF00", "#FF001A", "#FF8B3D",
+			  "#FFAF7A", "#00FF66", "#FF0099", "#7ACAFF", "#3DB1FF", "#00FFE6",
+			  "#E600FF", "#6600FF", "#001AFF", "#0099FF"];
+	*/
+
+
+	colors = ["#660000", "#FFFFFF", "#040052", "#1F0AFF", "#FF0000", "#FFFFFF", "#059BFF", "#FA0000"]
+	square_groups = [];
+	for (var c in colors) { square_groups.push("squares_"+colors[c]); }
+	
+  </script>
+  
+  <script id=game_helpers>
+	function getIdsByColor(color) {
+		var square_ids = [];
+		for (var id in gbox._objects["squares_"+color]) { square_ids.push(id); }
+		return square_ids;
+	}
+	function getSquaresByColor(color) {
+		var squares = [];
+		for (var id in gbox._objects["squares_"+color]) {
+			squares.push(gbox.getObject("squares_"+color, id));
+		}
+		return squares;
+	}
+	function getColorPositions(color) {
+		var squares = getSquaresByColor(color);
+		var pos=[];
+		for (var sq in squares) {
+			pos.push({x:squares[sq].pos.x, y:squares[sq].pos.y});
+		}
+		return pos;
+	}
+	function getColorVelocities(color) {
+		var squares = getSquaresByColor(color);
+		var vel=[];
+		for (var sq in squares) { vel.push({x:sq.vel.x, y:sq.vel.y}); }
+		return vel;
+	}
+  </script>
+  
+  <script id=game_methods>  
+    // MAIN GAME METHODS
+    window.addEventListener('load', loadResources, false);
+    function loadResources() {
+        // Initialize Akihabara
+        help.akihabaraInit({
+            title:  'Squares!',  // This appears in the title bar
+            width:  screen_area.w,
+            height: screen_area.h,
+            zoom:   1,
+            splash: {background:"images/splash.png"} // Custom splash screen
+        });
+		gbox._splash.minimalTime=0;
+        // Load images and tiles
+        gbox.addImage('font', 'images/font.png');
+        
+        gbox.addFont({ id: 'small', image: 'font', firstletter:' ', tileh:8, tilew:8, tilerow:255, gapx:0, gapy:0 });
+		
+		gbox.addImage('button_img', 'images/button.png');
+        gbox.addTiles({id:"button_tile", image:"button_img", tileh:100, tilew:100, tilerow:1, gapx:0, gapy:0});
+        
+		/*
+        gbox.addImage('square_img', 'images/squares.png');
+		gbox.addTiles({
+            id:  'square_tiles',
+            image: 'square_img',
+            tileh:8, tilew:8, tilerow:9,
+            gapx:0, gapy:0
+        });*/
+		
+        gbox.loadAll(main);
+    }
+    function main() {
+        // Specify the object groups, in a certain order
+        gbox.setGroups( ['mouse', 'background'].concat(square_groups).concat(['buttons', 'game']) );
+
+        maingame = gamecycle.createMaingame('game', 'game');
+		
+        // disable the title/intro routines
+        maingame.gameMenu = function() { return true; };
+        maingame.gameTitleIntroAnimation = function(){ return true; };
+        maingame.gameIntroAnimation = function(){ return true; };
+		maingame.pressStartIntroAnimation = function(reset) {return true};
+        
+		maingame.gameEvents = function() {
+			//console.log(mouse.x, mouse.y);
+		}
+		
+		maingame.motions = {
+			"Vertical": false,    // Squares will go either up or down
+			"Horizontal": false,  // Squares will go either right or left
+			"Whizz": false,       // Squares will get a random velocity
+			"Orbit": false,       // Squares will orbit the center of their color group
+			"Attract": false,     // Squares will go towards the center of their color group
+			"Migrate": false,     // Color groups will move in a random direction
+			"Jiggle": false,      // Squares will do a random walk
+			"Reverse": false,     // Reverse motion
+			"Stop": false,        // Stop motion
+		}
+        
+        maingame.initializeGame = function() {
+            addMouseControl();
+            addBackground();
+			addAllSquares();
+			
+			addButton("Vertical", xy(0,canvas.h+pad));
+			addButton("Orbit", xy(100+pad,canvas.h+pad));
+			addButton("Attract", xy(200+2*pad,canvas.h+pad) );
+			
+			
+        };
+        
+        gbox.go();
+    }
+	function addButton(_motion, position) {
+		b = {
+			id: "button_"+_motion,
+			group: "buttons",
+			pos: position,
+			x: position.x,
+			y: position.y,
+			w: 100,
+			h: 100,
+			motion:_motion,
+			fill:0.1,
+			active:false,
+			clicked:false,
+			initialize: function() {},
+			first: function() {
+				this.state = 
+				mouseover = gbox.pixelcollides(xy(mouse.x, mouse.y), this);
+				if (mouse.isClicked && mouseover) this.clicked=!this.clicked;
+				else if (mouseover) this.active=true;
+				else this.active=this.clicked;
+				
+				this.fill = this.active ? 0.2 : 0.1;
+				maingame.motions[this.motion]=this.active;
+			},
+			blit: function() {
+				border_thickness = 2;
+				button_color = "white";
+				
+				ts = gbox.getTiles("button_tile");
+				
+				//gbox.blitTile(gbox.getBufferContext(), {tileset:ts, tile:0, dx:this.pos.x, dy:this.pos.y});
+				
+				//gbox.blit(gbox.getBufferContext(), gbox.getImage("button_img"), {dx:this.pos.x, dy:this.pos.y});
+				
+				gbox.blitRect(gbox.getBufferContext(), {x:this.pos.x, y:this.pos.y, w:100, h:100, color:button_color});
+				gbox.blitRect(gbox.getBufferContext(), {x:this.pos.x+border_thickness, y:this.pos.y+border_thickness, w:100-2*border_thickness, h:100-2*border_thickness, color:"black"});
+				gbox.blitRect(gbox.getBufferContext(), {x:this.pos.x+border_thickness, y:this.pos.y+border_thickness, w:100-2*border_thickness, h:100-2*border_thickness, color:button_color, alpha:this.fill});
+				
+				
+				gbox.blitText(gbox.getBufferContext(), {font:"small", text:this.motion, dx:this.pos.x, dy:this.pos.y, dw:ts.tilew, dh: ts.tileh, valign:gbox.ALIGN_MIDDLE, halign:gbox.ALIGN_CENTER});
+			}
+		};
+		gbox.addObject(b);
+		return b;
+	}
+	function addAllSquares() {
+		for (var i=0; i<num_squares; i++) { addSquare(i); }
+	}
+	function addSquare(ID) {
+		var c = randomItem(colors);
+		gbox.addObject({
+			id:"square_"+ID.toString(),
+			color: c,
+			group: "squares_"+c,
+			
+			size: initial_size,
+			pos: {x: help.random(0, canvas.w),
+				  y: help.random(0, canvas.h)},
+			vel: {x: 0, y: 0},
+			cbox: {},
+			
+			updateCollisionBox: function() {
+				this.cbox.x = this.pos.x-this.size/2;
+				this.cbox.y = this.pos.y-this.size/2;
+				this.cbox.w = this.size;
+				this.cbox.h = this.size;
+			},
+			initialize: function() {
+				this.first();
+				//if (this.id=="square_1") console.log(this.pos.x, this.pos.y);
+			},
+			first: function() {
+				var dpos = {x:0, y:0};
+				var dvel = {x:0, y:0};
+				var dsize = 0;
+				
+				// BUTTON INPUTS
+				if (maingame.motions['Vertical']) {
+					if (Math.round(this.pos.x/this.size)%2==0)
+						dpos.y += 1;
+					else
+						dpos.y -= 1;
+				}
+				if (maingame.motions['Orbit']) {
+					var angle = trigo.getAngle(this.pos, bg.color_centers[this.color], Math.PI/2);
+					trigo.translate(dpos, angle, 1);
+				}
+				if (maingame.motions['Attract']) {
+					var angle = trigo.getAngle(this.pos, bg.color_centers[this.color]);
+					trigo.translate(dpos, angle, 1);
+				}
+				
+				// Player-input updates to size, position and velocity
+				if (gbox.keyIsPressed('plus')) {	  // Get bigger
+					dsize += 1;
+				}
+				if (gbox.keyIsPressed('minus')) {  // Get smaller
+					dsize -= 1;
+				}
+				if (gbox.keyIsPressed('up')) { 	  // Separate vertically
+					if (Math.round(this.pos.x/this.size)%2==0) {
+						dpos.y += 1;
+					}
+					else { dpos.y -= 1; }
+				}
+				if (gbox.keyIsPressed('down')) {  // Separate vertically
+					if (Math.round(this.pos.x/this.size)%2==0) { dpos.y -= 1; }
+					else { dpos.y += 1; }
+				}
+				if (gbox.keyIsPressed('left')) {  // Separate horizontally
+					if (Math.round(this.pos.y/this.size)%2==0) { dpos.x -= 1; }
+					else { dpos.x += 1; }
+				}
+				if (gbox.keyIsPressed('right')) { // Separate horizontally
+					if (Math.round(this.pos.y/this.size)%2==0) { dpos.x += 1; }
+					else { dpos.x -= 1; }
+				}
+				if (gbox.keyIsPressed('one')) {   // Randomly adjust position
+					trigo.translate(dpos, randomAngle(), 1);
+				}
+				if (gbox.keyIsPressed('two')) {   // Randomly adjust velocity
+					trigo.translate(dvel, randomAngle(), 1);
+				}
+				if (gbox.keyIsPressed('three')) { // Move towards same colors
+					var angle = trigo.getAngle(this.pos, bg.color_centers[this.color]);
+					trigo.translate(dpos, angle, 1);
+				}
+				if (gbox.keyIsPressed('enter')) { // Orbit the same colors
+					var angle = trigo.getAngle(this.pos, bg.color_centers[this.color], Math.PI/2);
+					trigo.translate(dpos, angle, 1);
+				}
+				if (gbox.keyIsPressed('c')) {	  // All sqsuares move in a random curve
+					trigo.translate(dpos, bg.ddir, bg.speed);
+				}
+				if (gbox.keyIsPressed('v')) {	  // Colors glide in random directions together
+					trigo.translate(dpos, bg.color_directions[this.color], 1);
+				}
+				
+				// Account for velocity in the position update
+				dpos.x += this.vel.x;
+				dpos.y += this.vel.y;
+				
+				// motion alterations
+				if (gbox.keyIsPressed('space')) { // Reverse motion
+					dpos = vect_scale(dpos, -1);
+					dsize = -dsize;
+				}
+				if (gbox.keyIsHit('s')) { // Stop motion
+					dvel = vect_scale(this.vel, -1);
+				}
+				if (gbox.keyIsHit('tab')) {	// Accelerate
+					dvel.x += dpos.x;
+					dvel.y += dpos.y;
+				}
+				
+				
+				// The final updates
+				this.size += dsize;
+				this.pos.x += dpos.x;
+				this.pos.y += dpos.y;
+				this.vel.x += dvel.x;
+				this.vel.y += dvel.y;
+				
+				if (this.size<=0) this.size=1;
+				
+				// Make sure the square stays on the game canvas
+				this.pos.x = mod(this.pos.x, canvas.w);
+				this.pos.y = mod(this.pos.y, canvas.h);
+				
+				this.updateCollisionBox();
+				
+				
+			},
+			blit: function() {
+				gbox.blitRect(gbox.getBufferContext(),
+				   {x: this.pos.x-this.size/2,
+					y: this.pos.y-this.size/2,
+					w: this.size,
+					h: this.size,
+					color: this.color,
+					alpha: 1.0
+					}
+				);
+			}
+		});
+	}
+	function addBackground() {
+        bg = {
+            id: 'background',
+            group: 'background',
+			
+			frame:0,
+			
+			speed: 1,
+			dtheta: 0.05,
+			ddir: 0,
+					
+			color_centers: {},
+			color_directions: {},
+            
+			
+			setColorGroupCenters: function(){
+				for (var c in colors) {
+					this.color_centers[colors[c]] = vect_avg(getColorPositions(colors[c]));
+				}
+			},
+			resetColorDirections: function() {
+				for (var c in colors) {
+					this.color_directions[colors[c]] = randomAngle();
+				}
+			},
+
+	
+			initialize: function() {},
+            first:      function() {
+				// Increment the frame
+				this.frame+=1;
+			
+				// Set a new angle change
+				if (this.frame%1==0) this.ddir = help.random(-1, 3);
+			
+				// Set new speeds/directions for each color group
+				if (gbox.keyIsHit('v')) this.resetColorDirections();
+				
+				// Calculate the average positions of each color
+				this.setColorGroupCenters();
+			},
+            blit:       function() { clearBuffer(.07); }
+        };
+		gbox.addObject(bg);
+    }
+    </script>
+</html>
