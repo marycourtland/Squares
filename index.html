@@ -88,21 +88,23 @@
   
   <script id=game_vars>
     // GLOBAL GAME VARIABLES
-	screen_area = wh(640, 480);
-	canvas = wh(640, 300);
-	button_w = 100;
-	button_h = 60;
-	pad = 20; // space between the canvas and the buttons
+	screen_area = wh(620, 620);
+	pad = 30; // space between the canvas and the buttons
+	button_w = 100;  button_h = 60;
+	canvas_w = 640;  canvas_h = 320;
+	canvas_x = 0;    canvas_y = button_h+2*pad;
+	
 	num_squares=500;
 	initial_size=2;
-	
+	/*
 	colors = ["#FF6600", "#FFE600", "#99FF00", "#1AFF00", "#FF001A", "#FF8B3D",
 			  "#FFAF7A", "#00FF66", "#FF0099", "#7ACAFF", "#3DB1FF", "#00FFE6",
 			  "#E600FF", "#6600FF", "#001AFF", "#0099FF"];
+	*/
 	
+	colors = ["FF0000", "FF7800", "00A0FF", "00FF00", "FFC200", "FFFD00", "8A30BF", "0A00FF", "00712A"]
 
-
-	//colors = ["#660000", "#FFFFFF", "#040052", "#1F0AFF", "#FF0000", "#FFFFFF", "#059BFF", "#FA0000"]
+	//colors = ["#660000", "#FFFFFF", "#040052", "#1F0AFF", "#FF0000", "#FFFFFF", "#059BFF"]
 	square_groups = [];
 	for (var c in colors) { square_groups.push("squares_"+colors[c]); }
 	
@@ -158,15 +160,6 @@
 		gbox.addImage('button_img', 'images/button.png');
         gbox.addTiles({id:"button_tile", image:"button_img", tileh:button_h, tilew:button_w, tilerow:1, gapx:0, gapy:0});
         
-		/*
-        gbox.addImage('square_img', 'images/squares.png');
-		gbox.addTiles({
-            id:  'square_tiles',
-            image: 'square_img',
-            tileh:8, tilew:8, tilerow:9,
-            gapx:0, gapy:0
-        });*/
-		
         gbox.loadAll(main);
     }
     function main() {
@@ -204,15 +197,15 @@
 			
 			var bw = button_w+pad;
 			var bh = button_h+pad;
-			addButton("Vertical",   xy(pad+0,   pad+canvas.h));
-			addButton("Horizontal", xy(pad+0,   pad+canvas.h + bh));
-			addButton("Orbit",      xy(pad+bw,  pad+canvas.h));
-			addButton("Attract",    xy(pad+bw,  pad+canvas.h + bh));
-			addButton("Whizz",      xy(pad+bw*2,pad+canvas.h));
-			addButton("Migrate",    xy(pad+bw*2,pad+canvas.h + bh));
-			addButton("Jiggle",     xy(pad+bw*3,pad+canvas.h));
-			addButton("Reverse",    xy(pad+bw*3,pad+canvas.h + bh));
-			addButton("Stop",       xy(pad+bw*4,pad+canvas.h));
+			addButton("Vertical",   xy(0,   pad));
+			addButton("Horizontal", xy(bw,  pad));
+			addButton("Orbit",      xy(bw*2,pad));
+			addButton("Attract",    xy(bw*3,pad));
+			addButton("Migrate",    xy(bw*4,pad));
+			addButton("Whizz",      xy(0,   pad*2+bh+canvas_h));
+			addButton("Jiggle",     xy(bw,  pad*2+bh+canvas_h));
+			addButton("Reverse",    xy(bw*3,pad*2+bh+canvas_h));
+			addButton("Stop",       xy(bw*4,pad*2+bh+canvas_h));
         };
         
         gbox.go();
@@ -273,15 +266,15 @@
 			group: "squares_"+c,
 			
 			size: initial_size,
-			pos: {x: help.random(0, canvas.w),
-				  y: help.random(0, canvas.h)},
-			vel: {x: 0, y: 0},
-			cbox: {},
-			
-			
+			pos: {x: help.random(0, canvas_w),
+				  y: help.random(0, canvas_h)},
+
 			vel_angle: 0,
 			x_shift: 0,
 			y_shift: 0,
+			
+			vel: {x: 0, y: 0}, // `OLD
+			cbox: {},		   // `OLD
 			
 			updateCollisionBox: function() {
 				this.cbox.x = this.pos.x-this.size/2;
@@ -295,7 +288,7 @@
 			},
 			first: function() {
 				var dpos = {x:0, y:0};
-				var dvel = {x:0, y:0};
+				var dvel = {x:0, y:0}; // `OLD
 				var dsize = 0;
 				
 				// BUTTON INPUTS
@@ -322,8 +315,12 @@
 				if (maingame.motions['Jiggle']) {
 					trigo.translate(dpos, randomAngle(), 1);
 				}
+				if (maingame.motions['Migrate'] && bg.color_directions[this.color]) {
+					//console.log("MIGRATING", this.id, "   ", this.color, "->", bg.color_directions[this.color]);
+					trigo.translate(dpos, bg.color_directions[this.color], 1);
+				}
 				
-				// KEYBOARD INPUTS
+				// KEYBOARD INPUTS (`OLD)
 				if (gbox.keyIsPressed('plus')) {	  // Get bigger
 					dsize += 1;
 				}
@@ -356,10 +353,6 @@
 				if (gbox.keyIsPressed('v')) {	  // Colors glide in random directions together
 					trigo.translate(dpos, bg.color_directions[this.color], 1);
 				}
-				if (maingame.motions['Migrate'] && bg.color_directions[this.color]) {
-					//console.log("MIGRATING", this.id, "   ", this.color, "->", bg.color_directions[this.color]);
-					trigo.translate(dpos, bg.color_directions[this.color], 1);
-				}
 				
 				// Account for velocity in the position update
 				//dpos.x += this.vel.x;
@@ -370,7 +363,7 @@
 					dpos = vect_scale(dpos, -1);
 					dsize = -dsize;
 				}
-				if (maingame.motions['Stop'] || gbox.keyIsHit('s')) { // Stop motion
+				if (gbox.keyIsHit('s')) { // Stop motion
 					dvel = vect_scale(this.vel, -1);
 				}
 				if (gbox.keyIsHit('tab')) {	// Accelerate
@@ -381,16 +374,19 @@
 				
 				// The final updates
 				this.size += dsize;
-				this.pos.x += dpos.x;
-				this.pos.y += dpos.y;
+				
+				if (!maingame.motions['Stop']) {
+					this.pos.x += dpos.x;
+					this.pos.y += dpos.y;
+				}
 				//this.vel.x += dvel.x;
 				//this.vel.y += dvel.y;
 				
 				if (this.size<=0) this.size=1;
 				
 				// Make sure the square stays on the game canvas
-				this.pos.x = mod(this.pos.x, canvas.w);
-				this.pos.y = mod(this.pos.y, canvas.h);
+				this.pos.x = mod(this.pos.x, canvas_w);
+				this.pos.y = mod(this.pos.y, canvas_h);
 				
 				//this.updateCollisionBox();
 				
@@ -398,8 +394,8 @@
 			},
 			blit: function() {
 				gbox.blitRect(gbox.getBufferContext(),
-				   {x: this.pos.x-this.size/2,
-					y: this.pos.y-this.size/2,
+				   {x: this.pos.x-this.size/2 + canvas_x,
+					y: this.pos.y-this.size/2 + canvas_y,
 					w: this.size,
 					h: this.size,
 					color: this.color,
