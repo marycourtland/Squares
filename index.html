@@ -3,6 +3,7 @@
 
 <html>
   <head>
+    <script type="text/javascript" src="akihabara/iphopad.js"></script>
     <script type="text/javascript" src="akihabara/gbox.js"></script>
     <script type="text/javascript" src="akihabara/trigo.js"></script>
     <script type="text/javascript" src="akihabara/help.js"></script>
@@ -174,9 +175,6 @@
         maingame.gameIntroAnimation = function(){ return true; };
 		maingame.pressStartIntroAnimation = function(reset) {return true};
         
-		maingame.gameEvents = function() {
-			//console.log(mouse.x, mouse.y);
-		}
 		
 		maingame.motions = {
 			"Vertical": false,    // Squares will go either up or down
@@ -188,6 +186,9 @@
 			"Jiggle": false,      // Squares will do a random walk
 			"Reverse": false,     // Reverse motion
 			"Stop": false,        // Stop motion
+		}
+		
+		maingame.gameEvents = function() {
 		}
         
         maingame.initializeGame = function() {
@@ -205,7 +206,15 @@
 			addButton("Whizz",      xy(0,   pad*2+bh+canvas_h));
 			addButton("Jiggle",     xy(bw,  pad*2+bh+canvas_h));
 			addButton("Reverse",    xy(bw*3,pad*2+bh+canvas_h));
-			addButton("Stop",       xy(bw*4,pad*2+bh+canvas_h));
+			stop_button = addButton("Stop",       xy(bw*4,pad*2+bh+canvas_h));
+			stop_button.onClick = function() {
+				this.clicked=!this.clicked;
+				if (this.clicked) for (m in maingame.motions) {
+					if (m=="Stop") continue;
+					maingame.motions[m] = false;
+					gbox.getObject("buttons", "button_"+m).disable();
+				}
+			}
         };
         
         gbox.go();
@@ -223,11 +232,19 @@
 			fill:0.1,
 			active:false,
 			clicked:false,
+			
+			disable: function() {
+				this.clicked=false;
+				this.active=false;
+			},
+			onClick: function() {
+				this.clicked = !this.clicked;
+			},
 			initialize: function() {},
 			first: function() {
 				this.state = 
 				mouseover = gbox.pixelcollides(xy(mouse.x, mouse.y), this);
-				if (mouse.isClicked && mouseover) this.clicked=!this.clicked;
+				if (mouse.isClicked && mouseover) { this.onClick(); }
 				else if (mouseover) this.active=true;
 				else this.active=this.clicked;
 				
@@ -236,7 +253,7 @@
 			},
 			blit: function() {
 				border_thickness = 2;
-				button_color = "white";
+				button_color = this.clicked? "white" : "gray";
 				
 				ts = gbox.getTiles("button_tile");
 				
@@ -246,7 +263,7 @@
 				
 				gbox.blitRect(gbox.getBufferContext(), {x:this.pos.x, y:this.pos.y, w:button_w, h:button_h, color:button_color});
 				gbox.blitRect(gbox.getBufferContext(), {x:this.pos.x+border_thickness, y:this.pos.y+border_thickness, w:button_w-2*border_thickness, h:button_h-2*border_thickness, color:"black"});
-				gbox.blitRect(gbox.getBufferContext(), {x:this.pos.x+border_thickness, y:this.pos.y+border_thickness, w:button_w-2*border_thickness, h:button_h-2*border_thickness, color:button_color, alpha:this.fill});
+				gbox.blitRect(gbox.getBufferContext(), {x:this.pos.x+border_thickness, y:this.pos.y+border_thickness, w:button_w-2*border_thickness, h:button_h-2*border_thickness, color:"white", alpha:this.fill});
 				
 				
 				gbox.blitText(gbox.getBufferContext(), {font:"small", text:this.motion, dx:this.pos.x, dy:this.pos.y, dw:ts.tilew, dh: ts.tileh, valign:gbox.ALIGN_MIDDLE, halign:gbox.ALIGN_CENTER});
@@ -273,30 +290,19 @@
 			x_shift: 0,
 			y_shift: 0,
 			
-			vel: {x: 0, y: 0}, // `OLD
-			cbox: {},		   // `OLD
-			
-			updateCollisionBox: function() {
-				this.cbox.x = this.pos.x-this.size/2;
-				this.cbox.y = this.pos.y-this.size/2;
-				this.cbox.w = this.size;
-				this.cbox.h = this.size;
-			},
 			initialize: function() {
 				this.first();
 				//if (this.id=="square_1") console.log(this.pos.x, this.pos.y);
 			},
 			first: function() {
 				var dpos = {x:0, y:0};
-				var dvel = {x:0, y:0}; // `OLD
 				var dsize = 0;
 				
-				// BUTTON INPUTS
-				if (maingame.motions['Horizontal']) {
+				if (maingame.motions['Horizontal'] || gbox.keyIsPressed('up') || gbox.keyIsPressed('down')) {
 					if (this.x_shift==0) this.x_shift = (Math.round(Math.random())-0.5)*2;
 					dpos.x += this.x_shift;
 				} else { this.x_shift=0; }
-				if (maingame.motions['Vertical']) {
+				if (maingame.motions['Vertical'] || gbox.keyIsPressed('up') || gbox.keyIsPressed('down')) {
 					if (this.y_shift==0) this.y_shift = (Math.round(Math.random())-0.5)*2;
 					dpos.y += this.y_shift;
 				} else { this.y_shift=0; }
@@ -320,77 +326,29 @@
 					trigo.translate(dpos, bg.color_directions[this.color], 1);
 				}
 				
-				// KEYBOARD INPUTS (`OLD)
 				if (gbox.keyIsPressed('plus')) {	  // Get bigger
 					dsize += 1;
 				}
 				if (gbox.keyIsPressed('minus')) {  // Get smaller
 					dsize -= 1;
 				}
-				if (gbox.keyIsPressed('up')) { 	  // Separate vertically
-					if (Math.round(this.pos.y/this.size)%2==0) {
-						dpos.y += 1;
-					}
-					else { dpos.y -= 1; }
-				}
-				if (gbox.keyIsPressed('down')) {  // Separate vertically
-					if (Math.round(this.pos.y/this.size)%2==0) { dpos.y -= 1; }
-					else { dpos.y += 1; }
-				}
-				if (gbox.keyIsPressed('left')) {  // Separate horizontally
-					if (Math.round(this.pos.x/this.size)%2==0) { dpos.x -= 1; }
-					else { dpos.x += 1; }
-				}
-				if (gbox.keyIsPressed('right')) { // Separate horizontally
-					if (Math.round(this.pos.x/this.size)%2==0) { dpos.x += 1; }
-					else { dpos.x -= 1; }
-				}
-				
-				
-				if (gbox.keyIsPressed('c')) {	  // All squares move in a random curve
-					trigo.translate(dpos, bg.ddir, bg.speed);
-				}
-				if (gbox.keyIsPressed('v')) {	  // Colors glide in random directions together
-					trigo.translate(dpos, bg.color_directions[this.color], 1);
-				}
-				
-				// Account for velocity in the position update
-				//dpos.x += this.vel.x;
-				//dpos.y += this.vel.y;
-				
-				// motion alterations
+								
 				if (maingame.motions['Reverse'] || gbox.keyIsPressed('space')) { // Reverse motion
 					dpos = vect_scale(dpos, -1);
 					dsize = -dsize;
 				}
-				if (gbox.keyIsHit('s')) { // Stop motion
-					dvel = vect_scale(this.vel, -1);
-				}
-				if (gbox.keyIsHit('tab')) {	// Accelerate
-					dvel.x += dpos.x;
-					dvel.y += dpos.y;
-				}
-				
 				
 				// The final updates
 				this.size += dsize;
+				if (this.size<=0) this.size=1;
 				
 				if (!maingame.motions['Stop']) {
 					this.pos.x += dpos.x;
 					this.pos.y += dpos.y;
 				}
-				//this.vel.x += dvel.x;
-				//this.vel.y += dvel.y;
-				
-				if (this.size<=0) this.size=1;
-				
 				// Make sure the square stays on the game canvas
 				this.pos.x = mod(this.pos.x, canvas_w);
 				this.pos.y = mod(this.pos.y, canvas_h);
-				
-				//this.updateCollisionBox();
-				
-				
 			},
 			blit: function() {
 				gbox.blitRect(gbox.getBufferContext(),
